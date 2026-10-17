@@ -452,6 +452,8 @@ body {
 .tally { align-items: center; }
 .tally-coin { display: inline-flex; filter: drop-shadow(0 0 8px #ffcf3f40); margin-right: -2px; }
 
+.reset-btn { background: #2a2550; color: var(--text); box-shadow: inset -3px -3px 0 #1a1636, 3px 3px 0 #000; }
+
 /* ---------- 窄屏 ---------- */
 @media (max-width: 900px) {
   .app { height: auto; }

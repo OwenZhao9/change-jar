@@ -362,6 +362,27 @@ export default function App() {
     try { localStorage.removeItem(PID_KEY); } catch {}
   };
 
+  /** 复位：进行中的项目先上线，三方把可领的钱都领走，再回到创建表单 */
+  const resetAll = () => run('复位', async () => {
+    if (!backend || !wallets) return;
+    const id = pidRef.current;
+    if (id !== null) {
+      const p = await backend.project(id);
+      if (p.status === 0 && !(await send('pm', { fn: 'launch', id }))) return;
+    }
+    for (const r of ROLES) {
+      if ((await backend.claimable(wallets[r].address)) > 0n && !(await send(r, { fn: 'withdraw' }))) return;
+    }
+    newProject();
+    setRole('pm');
+    setNoteIdx(0);
+    setNote(NOTES[0]);
+    if ((await backend.balance(wallets.pm.address)) < parseEther('1.2')) {
+      try { await backend.fund(wallets.pm.address); } catch {}
+    }
+    await refresh();
+  });
+
   const fundMe = () => run('领取测试币', async () => {
     if (!backend || !wallets) return;
     let failed = false;
@@ -427,6 +448,9 @@ export default function App() {
           ))}
         </nav>
         <div className="wallet">
+          <button className="btn mini reset-btn" disabled={!!busy} onClick={resetAll} title="进行中的项目自动上线并领完钱，回到创建项目">
+            {busy === '复位' ? '复位中…' : '复位'}
+          </button>
           <button className="icon" onClick={toggleMute} aria-label={muted ? '打开声音' : '静音'} title={muted ? '打开声音' : '静音'}>
             <svg width="18" height="18" viewBox="0 0 9 9" shapeRendering="crispEdges" aria-hidden>
               <g fill="currentColor">
