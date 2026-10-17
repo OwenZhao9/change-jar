@@ -6,7 +6,7 @@ import { CONTRACT_ADDRESS, EXPLORER_URL, FAUCET_PAGE } from '@/lib/config';
 import { NOTES, specHashFor, specHashV0 } from '@/lib/presets';
 import { isMuted, setMuted, sfx } from '@/lib/audio';
 import { loadWallets, ROLE_LABEL, ROLES, type Role, type Wallet } from '@/lib/wallets';
-import type { Backend, Call, Change, Project, TxResult } from '@/lib/types';
+import type { Backend, Call, Change, Project, TxResult, TxStage } from '@/lib/types';
 import { Jar } from './Jar';
 import { Timeline } from './Timeline';
 import { Devs, PmCard } from './Devs';
@@ -33,6 +33,17 @@ const EMPTY: Snap = {
   claimable: { pm: 0n, dev1: 0n, dev2: 0n }, balance: { pm: 0n, dev1: 0n, dev2: 0n },
 };
 type LastTx = { label: string; r: TxResult } | null;
+type TxView = { id: number; label: string; who: string; stage: TxStage | 'done' | 'error'; r?: TxResult; msg?: string };
+
+/** 把节点报错翻译成一句人话 */
+function friendly(m: string, who: string): string {
+  if (/insufficient funds|exceeds the balance/i.test(m)) return `${who} 钱包余额不足`;
+  if (/nonce/i.test(m)) return '交易顺序冲突，请稍后重试';
+  if (/timeout|timed out/i.test(m)) return '网络超时，请重试';
+  if (/fetch|network|HTTP request failed/i.test(m)) return '连不上 Monad 测试网节点，请重试';
+  if (/reverted|合约拒绝/i.test(m)) return '合约拒绝了这笔交易';
+  return m.split('\n')[0].slice(0, 100);
+}
 
 export default function App() {
   const [backend, setBackend] = useState<Backend | null>(null);
@@ -52,6 +63,12 @@ export default function App() {
   const [funding, setFunding] = useState<string | null>(null);
   const [flown, setFlown] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [tx, setTx] = useState<TxView | null>(null);
+  const [pending, setPending] = useState<{ version: number; note: string } | null>(null);
+  const [robotStep, setRobotStep] = useState(0);
+  const robotHide = useRef<number | undefined>(undefined);
+  const txSeq = useRef(0);
+  const txHide = useRef<number | undefined>(undefined);
 
   const jarRef = useRef<HTMLDivElement>(null);
   const avatarRefs = useRef<(HTMLDivElement | null)[]>([null, null]);
@@ -77,10 +94,11 @@ export default function App() {
           }
           if (id === null) {
             const n = await b.projectCount();
-            for (let k = n - 1n; k >= 0n && k >= n - 20n; k--) {
-              const p = await b.project(k);
-              if (p.pm.toLowerCase() === w.pm.address.toLowerCase()) { id = k; break; }
-            }
+            const ids: bigint[] = [];
+            for (let k = n - 1n; k >= 0n && k >= n - 20n; k--) ids.push(k);
+            const ps = await Promise.all(ids.map((k) => b.project(k).catch(() => null)));
+            const hit = ps.findIndex((p) => p && p.pm.toLowerCase() === w.pm.address.toLowerCase());
+            if (hit >= 0) id = ids[hit];
           }
         } catch {}
       }
@@ -204,14 +222,25 @@ export default function App() {
     if (!backend || !wallets) return null;
     sfx.unlock();
     setErr(null);
+    const id = ++txSeq.current;
+    const label = LABEL[call.fn];
+    const who = ROLE_LABEL[r];
+    window.clearTimeout(txHide.current);
+    setTx({ id, label, who, stage: 'signing' });
+    const upd = (v: Partial<TxView>) => setTx((t) => (t && t.id === id ? { ...t, ...v } : t));
     try {
-      const res = await backend.send(wallets[r].pk, call);
-      setLast({ label: LABEL[call.fn], r: res });
+      const res = await backend.send(wallets[r].pk, call, (stage) => upd({ stage }));
+      setLast({ label, r: res });
+      upd({ stage: 'done', r: res });
+      txHide.current = window.setTimeout(() => setTx((t) => (t && t.id === id ? null : t)), 4500);
       return res;
     } catch (e) {
       sfx.error();
       const m = String((e as { shortMessage?: string })?.shortMessage ?? (e as Error)?.message ?? e);
-      setErr(/insufficient funds|exceeds the balance/i.test(m) ? `${ROLE_LABEL[r]} 余额不足` : m.split('\n')[0].slice(0, 120));
+      const msg = friendly(m, who);
+      setErr(msg);
+      upd({ stage: 'error', msg });
+      txHide.current = window.setTimeout(() => setTx((t) => (t && t.id === id ? null : t)), 8000);
       return null;
     }
   }, [backend, wallets]);
@@ -243,7 +272,9 @@ export default function App() {
     if (!backend || pidRef.current === null) return false;
     const p = await backend.project(pidRef.current);
     const value = p.deposit >= p.fee ? 0n : p.fee;
+    setPending({ version: p.version + 1, note });
     const res = await send('pm', { fn: 'submitChange', id: pidRef.current, specHash: specHashFor(p.version + 1, note), note, value });
+    setPending(null);
     if (!res) return false;
     // 回执到手即落币
     const fromDeposit = value === 0n;
@@ -264,16 +295,20 @@ export default function App() {
 
   const robot = () => run('机器人连改', async () => {
     let idx = noteIdx;
+    window.clearTimeout(robotHide.current);
+    setRobotStep(0);
     for (let k = 0; k < 6; k++) {
       setBusy(`机器人连改 ${k + 1}/6`);
       const t0 = performance.now();
       const ok = await submitOne(NOTES[idx % NOTES.length]);
       if (!ok) break;
+      setRobotStep(k + 1);
       idx++;
       setNoteIdx(idx % NOTES.length);
       const gap = 1100 - (performance.now() - t0);
       if (gap > 0 && k < 5) await sleep(gap);
     }
+    robotHide.current = window.setTimeout(() => setRobotStep(0), 1500);
   });
 
   const launch = () => run('上线', async () => {
@@ -329,7 +364,15 @@ export default function App() {
   const devIdx = role === 'dev1' ? 0 : role === 'dev2' ? 1 : -1;
   const pal = useMemo(() => ({ pm: PAL_PM, dev1: PAL_D1, dev2: PAL_D2 }), []);
 
-  if (!ready) return <main className="boot px">LOADING…</main>;
+  if (!ready) {
+    return (
+      <main className="boot">
+        <div className="boot-coin"><Sprite map={COIN} palette={COIN_GOLD} cell={4} /></div>
+        <h1 className="px title">需求变更罐</h1>
+        <p className="boot-msg">正在连接 Monad 测试网<span className="confirming" /></p>
+      </main>
+    );
+  }
   if (!backend) {
     return (
       <main className="boot">
@@ -345,7 +388,7 @@ export default function App() {
       <div className="coin-template" hidden><Sprite map={COIN} palette={COIN_GOLD} cell={3} /></div>
       <header className="top">
         <div className="brand">
-          <Sprite map={COIN} palette={COIN_GOLD} cell={3} />
+          <Sprite map={COIN} palette={COIN_GOLD} cell={2} />
           <h1 className="px title">需求变更罐</h1>
         </div>
         <nav className="roles" aria-label="角色切换">
@@ -370,8 +413,7 @@ export default function App() {
             return (
               <div key={r} className={`wcell ${role === r ? 'on' : ''} ${low && !funding ? 'low' : ''}`}>
                 <span className="wname">{ROLE_LABEL[r]}</span>
-                <button className="waddr" onClick={() => copy(wallets[r].address)} title="复制地址">
-                  <span className="full">{wallets[r].address}</span>
+                <button className="waddr" onClick={() => copy(wallets[r].address)} title={`${wallets[r].address}（点击复制）`}>
                   <span className="short">{short(wallets[r].address)}</span>
                 </button>
                 <b className="wbal px">{fmt(snap.balance[r], 3)}</b><span className="dim">MON</span>
@@ -387,7 +429,7 @@ export default function App() {
           <Timeline
             project={project} changes={changes} acks={snap.acks}
             canAck={role !== 'pm' && wallets ? (wallets[role].address as Address) : null}
-            busy={!!busy} onAck={ack}
+            busy={!!busy} onAck={ack} pending={pending}
           />
         </div>
 
@@ -430,21 +472,29 @@ export default function App() {
               <select className="note-pick" value={noteIdx} onChange={(e) => setNoteIdx(Number(e.target.value))} aria-label="变更说明" disabled={!!busy}>
                 {NOTES.map((n, i) => <option key={i} value={i}>{n}</option>)}
               </select>
-              <button className="btn" disabled={!!busy} onClick={submit}>
-                提交变更{nextNeedsCash && project ? ` · 现付 ${fmt(project.fee)}` : ''}
+              <button className={`btn submit ${busy === '提交变更' ? 'working' : ''}`} disabled={!!busy} onClick={submit}>
+                {busy === '提交变更' ? '提交中…' : <>提交变更{nextNeedsCash && project ? <small> · 现付 {fmt(project.fee)}</small> : ''}</>}
               </button>
-              <button className="btn hot" disabled={!!busy} onClick={robot}>机器人连改 6 次</button>
+              <button className={`btn hot ${busy?.startsWith('机器人') ? 'working' : ''}`} disabled={!!busy} onClick={robot}>
+                {busy?.startsWith('机器人') ? `连改中 ${Math.min(robotStep + 1, 6)}/6` : '机器人连改 6 次'}
+              </button>
             </>
           )}
           {status === 0 && (
-            <button className="btn launch" disabled={!!busy} onClick={launch}>上线</button>
+            <button className={`btn launch ${busy === '上线' ? 'working' : ''}`} disabled={!!busy} onClick={launch}>{busy === '上线' ? '上线中…' : '上线'}</button>
           )}
           {status === 1 && role === 'pm' && (
             <button className="btn" disabled={!!busy} onClick={newProject}>新项目</button>
           )}
-          {status === 1 && <span className="dim">项目已上线，各自领取分成</span>}
-          {busy && <span className="busy px">{busy}…</span>}
+          {status === -1 && <span className="dim launched-hint">{role === 'pm' ? '填好参数后点「创建项目」开始' : '切换到「产品经理」创建项目'}</span>}
+          {status === 1 && <span className="dim launched-hint">项目已上线，各自领取分成</span>}
+          {(busy?.startsWith('机器人') || robotStep > 0) && (
+            <div className="robot-progress" aria-label={`机器人进度 ${robotStep}/6`}>
+              {Array.from({ length: 6 }, (_, k) => <i key={k} className={k < robotStep ? 'on' : k === robotStep && busy ? 'now' : ''} />)}
+            </div>
+          )}
         </div>
+        {tx && <TxToast tx={tx} explorer={backend.kind === 'chain' ? EXPLORER_URL : null} onClose={() => setTx(null)} />}
         <div className="statusbar" role="status">
           <span className="live"><i className="dot" /> Monad 测试网 · 区块 <b className="px">{block?.toString() ?? '—'}</b></span>
           {last && (
@@ -458,9 +508,46 @@ export default function App() {
           {CONTRACT_ADDRESS && pid !== null && (
             <a href={`${EXPLORER_URL}/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer">项目 #{pid.toString()}</a>
           )}
-          {err && <span className="red">{err}</span>}
+          {err && !tx && <span className="red">{err}</span>}
         </div>
       </footer>
+    </div>
+  );
+}
+
+const STEPS: { key: TxStage | 'done'; label: string }[] = [
+  { key: 'signing', label: '签名' },
+  { key: 'sent', label: '上链' },
+  { key: 'done', label: '确认' },
+];
+
+/** 交易进度：签名 → 上链 → 确认 */
+function TxToast({ tx, explorer, onClose }: { tx: TxView; explorer: string | null; onClose: () => void }) {
+  const at = tx.stage === 'error' ? -1 : STEPS.findIndex((s) => s.key === tx.stage);
+  return (
+    <div className={`toast toast-${tx.stage}`} role="status" aria-live="polite">
+      <div className="toast-head">
+        <b>{tx.label}</b>
+        <span className="dim">{tx.who}</span>
+        <button className="toast-x" onClick={onClose} aria-label="关闭">×</button>
+      </div>
+      {tx.stage === 'error' ? (
+        <div className="toast-msg red">{tx.msg}</div>
+      ) : (
+        <ol className="steps">
+          {STEPS.map((s, i) => (
+            <li key={s.key} className={i < at || tx.stage === 'done' ? 'done' : i === at ? 'now' : ''}>
+              <i />{s.label}
+            </li>
+          ))}
+        </ol>
+      )}
+      {tx.stage === 'done' && tx.r && (
+        <div className="toast-msg">
+          <b className="px gold">{tx.r.ms}ms</b> · {tx.r.mode === 'sync' ? '同步回执' : '发送后等待回执'}
+          {explorer && <> · <a href={`${explorer}/tx/${tx.r.hash}`} target="_blank" rel="noreferrer">{short(tx.r.hash)}</a></>}
+        </div>
+      )}
     </div>
   );
 }

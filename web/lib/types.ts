@@ -10,6 +10,7 @@ export type Call =
   | { fn: 'launch'; id: bigint }
   | { fn: 'withdraw' };
 
+export type TxStage = 'signing' | 'sent';
 export type TxResult = { ms: number; mode: 'sync' | 'fallback'; hash: Hex; createdId?: bigint };
 
 export interface Backend {
@@ -21,6 +22,6 @@ export interface Backend {
   claimable(addr: Address): Promise<bigint>;
   balance(addr: Address): Promise<bigint>;
   blockNumber(): Promise<bigint>;
-  send(pk: Hex, call: Call): Promise<TxResult>;
+  send(pk: Hex, call: Call, onStage?: (s: TxStage) => void): Promise<TxResult>;
   fund(addr: Address): Promise<void>;
 }

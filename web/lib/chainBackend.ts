@@ -57,16 +57,18 @@ export function createChainBackend(): Backend {
     claimable: (addr) => read<bigint>('claimable', [addr]),
     balance: (addr) => pub.getBalance({ address: addr }),
     blockNumber: () => pub.getBlockNumber(),
-    async send(pk, call): Promise<TxResult> {
+    async send(pk, call, onStage): Promise<TxResult> {
       const account = privateKeyToAccount(pk);
       const wallet = createWalletClient({ account, chain: monadTestnet, transport: http(RPC_URL) });
       const { data, value } = encode(call);
+      onStage?.('signing');
       // 估算 gas 时会暴露合约回滚原因
       const prepared = await wallet.prepareTransactionRequest({ to: address, data, value });
       const serialized = await wallet.signTransaction(prepared);
       const hash = keccak256(serialized);
       let receipt;
       let mode: 'sync' | 'fallback' = 'sync';
+      onStage?.('sent');
       const t0 = performance.now(); // 从发出已签名交易到拿到回执
       try {
         receipt = await wallet.sendRawTransactionSync({ serializedTransaction: serialized });

@@ -1,6 +1,17 @@
 import { memo } from 'react';
 
-export const COIN = ['..kkkk..', '.kyhhyk.', 'kyhyyyok', 'kyhyyyok', 'kyyyyyok', 'kyyyyook', '.kyoook.', '..kkkk..'];
+export const COIN = [
+  '..kkkkkk..',
+  '.khhyyyyk.',
+  'khhyyyyyok',
+  'khyyooyyok',
+  'kyyoyyoyok',
+  'kyyoyyoyok',
+  'kyyyooyyok',
+  'kyyyyyyook',
+  '.kooyyook.',
+  '..kkkkkk..',
+];
 export const COIN_GOLD = { k: '#9a4f00', y: '#ffcf3f', h: '#fff3a8', o: '#f08a00' };
 export const COIN_CASH = { k: '#1d6a7a', y: '#7fe9ff', h: '#e6fbff', o: '#3aa8c4' };
 
