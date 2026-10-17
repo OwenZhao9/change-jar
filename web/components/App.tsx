@@ -4,7 +4,7 @@ import { parseEther, type Address } from 'viem';
 import { createBackend } from '@/lib/backend';
 import { CONTRACT_ADDRESS, EXPLORER_URL, FAUCET_PAGE } from '@/lib/config';
 import { NOTES, specHashFor, specHashV0 } from '@/lib/presets';
-import { isMuted, setMuted, sfx } from '@/lib/audio';
+import { isMuted, setMusicOff, setMuted, sfx } from '@/lib/audio';
 import { loadWallets, ROLE_LABEL, ROLES, type Role, type Wallet } from '@/lib/wallets';
 import type { Backend, Call, Change, Project, TxResult, TxStage } from '@/lib/types';
 import { Jar } from './Jar';
@@ -59,6 +59,7 @@ export default function App() {
   const [last, setLast] = useState<LastTx>(null);
   const [block, setBlock] = useState<bigint | null>(null);
   const [muted, setMute] = useState(false);
+  const [musicOff, setMusic] = useState(false);
   const [noteIdx, setNoteIdx] = useState(0);
   const [note, setNote] = useState(NOTES[0]);
   const [fee, setFee] = useState('0.1');
@@ -86,6 +87,7 @@ export default function App() {
     const b = createBackend();
     setBackend(b);
     try { const m = localStorage.getItem('cj.muted') === '1'; setMute(m); setMuted(m); } catch {}
+    try { const mo = localStorage.getItem('cj.music') === '0'; setMusic(mo); setMusicOff(mo); } catch {}
     (async () => {
       if (!b) { setReady(true); return; }
       let id: bigint | null = null;
@@ -397,6 +399,11 @@ export default function App() {
     if (failed) setErr('自动领取未成功，请复制地址到 faucet.monad.xyz 领取');
   });
 
+  const toggleMusic = () => {
+    const m = !musicOff; setMusic(m); setMusicOff(m);
+    try { localStorage.setItem('cj.music', m ? '0' : '1'); } catch {}
+  };
+
   const toggleMute = () => {
     const m = !muted; setMute(m); setMuted(m);
     try { localStorage.setItem('cj.muted', m ? '1' : '0'); } catch {}
@@ -453,6 +460,15 @@ export default function App() {
         <div className="wallet">
           <button className="btn mini reset-btn" disabled={!!busy} onClick={resetAll} title="进行中的项目自动上线并领完钱，回到创建项目">
             {busy === '复位' ? '复位中…' : '复位'}
+          </button>
+          <button className="icon" onClick={toggleMusic} disabled={muted} aria-label={musicOff ? '打开背景音乐' : '关闭背景音乐'} title={musicOff ? '打开背景音乐' : '关闭背景音乐'}>
+            <svg width="18" height="18" viewBox="0 0 9 9" shapeRendering="crispEdges" aria-hidden>
+              <g fill={musicOff || muted ? 'var(--dim)' : 'var(--gold)'}>
+                <rect x="3" y="1" width="5" height="1" /><rect x="3" y="2" width="1" height="4" /><rect x="7" y="2" width="1" height="3" />
+                <rect x="1" y="5" width="3" height="2" /><rect x="5" y="4" width="3" height="2" />
+              </g>
+              {(musicOff || muted) && <g fill="var(--red)"><rect x="0" y="0" width="1" height="1" /><rect x="1" y="1" width="1" height="1" /><rect x="2" y="2" width="1" height="1" /><rect x="3" y="3" width="1" height="1" /><rect x="4" y="4" width="1" height="1" /><rect x="5" y="5" width="1" height="1" /><rect x="6" y="6" width="1" height="1" /><rect x="7" y="7" width="1" height="1" /><rect x="8" y="8" width="1" height="1" /></g>}
+            </svg>
           </button>
           <button className="icon" onClick={toggleMute} aria-label={muted ? '打开声音' : '静音'} title={muted ? '打开声音' : '静音'}>
             <svg width="18" height="18" viewBox="0 0 9 9" shapeRendering="crispEdges" aria-hidden>
