@@ -11,8 +11,10 @@ import { Jar } from './Jar';
 import { Timeline } from './Timeline';
 import { Devs, PmCard } from './Devs';
 import { fmt } from './Mon';
-import { AVATAR, AVATAR_PM, PAL_D1, PAL_D2, PAL_PM, Sprite, COIN, COIN_GOLD } from './Sprite';
+import { AVATAR, AVATAR_PM, PAL_D1, PAL_D2, PAL_PM, Sprite } from './Sprite';
+import { Coin } from './Coin';
 
+const NOTE_MAX = 140; // 合约限制：变更说明最多 140 字节
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const MIN_BAL: Record<Role, bigint> = { pm: parseEther('1'), dev1: parseEther('0.02'), dev2: parseEther('0.02') };
@@ -58,6 +60,7 @@ export default function App() {
   const [block, setBlock] = useState<bigint | null>(null);
   const [muted, setMute] = useState(false);
   const [noteIdx, setNoteIdx] = useState(0);
+  const [note, setNote] = useState(NOTES[0]);
   const [fee, setFee] = useState('0.1');
   const [deposit, setDeposit] = useState('0.8');
   const [funding, setFunding] = useState<string | null>(null);
@@ -268,46 +271,70 @@ export default function App() {
     }
   });
 
-  const submitOne = async (note: string) => {
-    if (!backend || pidRef.current === null) return false;
-    const p = await backend.project(pidRef.current);
+  /** 提交一张变更单。known 是已知的当前项目状态；fast 时只等这张上链，整页状态在后台刷新 */
+  const submitOne = async (note: string, known?: Project, fast = false): Promise<Project | null> => {
+    if (!backend || pidRef.current === null) return null;
+    const id = pidRef.current;
+    const p = known ?? await backend.project(id);
     const value = p.deposit >= p.fee ? 0n : p.fee;
     setPending({ version: p.version + 1, note });
-    const res = await send('pm', { fn: 'submitChange', id: pidRef.current, specHash: specHashFor(p.version + 1, note), note, value });
+    const res = await send('pm', { fn: 'submitChange', id, specHash: specHashFor(p.version + 1, note), note, value });
     setPending(null);
-    if (!res) return false;
+    if (!res) return null;
     // 回执到手即落币
     const fromDeposit = value === 0n;
-    optimistic.current = { pid: pidRef.current, version: p.version + 1, until: Date.now() + 15000 };
+    const next: Project = { ...p, version: p.version + 1, jar: p.jar + p.fee, deposit: fromDeposit ? p.deposit - p.fee : p.deposit };
+    optimistic.current = { pid: id, version: next.version, until: Date.now() + 15000 };
     setSnap((x) => x.project ? {
       ...x,
-      project: { ...x.project, version: p.version + 1, jar: p.jar + p.fee, deposit: fromDeposit ? p.deposit - p.fee : p.deposit },
-      changes: [...x.changes.slice(0, p.version + 1), { specHash: specHashFor(p.version + 1, note), note, fee: p.fee, timestamp: Math.floor(Date.now() / 1000), paidFromDeposit: fromDeposit }],
+      project: { ...x.project, version: next.version, jar: next.jar, deposit: next.deposit },
+      changes: [...x.changes.slice(0, p.version + 1), { specHash: specHashFor(next.version, note), note, fee: p.fee, timestamp: Math.floor(Date.now() / 1000), paidFromDeposit: fromDeposit }],
     } : x);
-    await refreshUntil((x) => (x.project?.version ?? 0) > p.version);
-    return true;
+    if (fast) {
+      // 节点读到新版本再发下一张，避免交易顺序冲突
+      for (let k = 0; k < 20; k++) {
+        try { if ((await backend.project(id)).version >= next.version) break; } catch {}
+        await sleep(150);
+      }
+      void refresh();
+    } else {
+      await refreshUntil((x) => (x.project?.version ?? 0) > p.version);
+    }
+    return next;
   };
 
+  const noteBytes = useMemo(() => new TextEncoder().encode(note.trim()).length, [note]);
+  const noteOk = noteBytes > 0 && noteBytes <= NOTE_MAX;
+
   const submit = () => run('提交变更', async () => {
-    const note = NOTES[noteIdx % NOTES.length];
-    if (await submitOne(note)) setNoteIdx((i) => (i + 1) % NOTES.length);
+    const text = note.trim();
+    if (!text || new TextEncoder().encode(text).length > NOTE_MAX) return;
+    if (await submitOne(text)) {
+      const n = (noteIdx + 1) % NOTES.length;
+      setNoteIdx(n);
+      setNote(NOTES[n]);
+    }
   });
 
   const robot = () => run('机器人连改', async () => {
     let idx = noteIdx;
+    let known: Project | undefined;
     window.clearTimeout(robotHide.current);
     setRobotStep(0);
     for (let k = 0; k < 6; k++) {
       setBusy(`机器人连改 ${k + 1}/6`);
       const t0 = performance.now();
-      const ok = await submitOne(NOTES[idx % NOTES.length]);
-      if (!ok) break;
+      const next = await submitOne(NOTES[idx % NOTES.length], known, true);
+      if (!next) break;
+      known = next;
       setRobotStep(k + 1);
       idx++;
       setNoteIdx(idx % NOTES.length);
-      const gap = 1100 - (performance.now() - t0);
+      setNote(NOTES[idx % NOTES.length]);
+      const gap = 700 - (performance.now() - t0);
       if (gap > 0 && k < 5) await sleep(gap);
     }
+    await refreshUntil((x) => (x.project?.version ?? 0) >= (known?.version ?? 0));
     robotHide.current = window.setTimeout(() => setRobotStep(0), 1500);
   });
 
@@ -367,8 +394,8 @@ export default function App() {
   if (!ready) {
     return (
       <main className="boot">
-        <div className="boot-coin"><Sprite map={COIN} palette={COIN_GOLD} cell={4} /></div>
-        <h1 className="px title">需求变更罐</h1>
+        <div className="boot-coin"><Coin size={44} /></div>
+        <h1 className="px title">让需求飞</h1>
         <p className="boot-msg">正在连接 Monad 测试网<span className="confirming" /></p>
       </main>
     );
@@ -376,7 +403,7 @@ export default function App() {
   if (!backend) {
     return (
       <main className="boot">
-        <h1 className="px title">需求变更罐</h1>
+        <h1 className="px title">让需求飞</h1>
         <p>未配置合约地址：请设置 <code>NEXT_PUBLIC_CHANGE_JAR_ADDRESS</code></p>
       </main>
     );
@@ -385,11 +412,11 @@ export default function App() {
   return (
     <div className="app">
       <div className="crt" aria-hidden />
-      <div className="coin-template" hidden><Sprite map={COIN} palette={COIN_GOLD} cell={3} /></div>
+      <div className="coin-template" hidden><Coin size={28} /></div>
       <header className="top">
         <div className="brand">
-          <Sprite map={COIN} palette={COIN_GOLD} cell={2} />
-          <h1 className="px title">需求变更罐</h1>
+          <Coin size={26} />
+          <h1 className="px title">让需求飞</h1>
         </div>
         <nav className="roles" aria-label="角色切换">
           {ROLES.map((r) => (
@@ -401,7 +428,14 @@ export default function App() {
         </nav>
         <div className="wallet">
           <button className="icon" onClick={toggleMute} aria-label={muted ? '打开声音' : '静音'} title={muted ? '打开声音' : '静音'}>
-            {muted ? '🔇' : '🔊'}
+            <svg width="18" height="18" viewBox="0 0 9 9" shapeRendering="crispEdges" aria-hidden>
+              <g fill="currentColor">
+                <rect x="0" y="3" width="2" height="3" /><rect x="2" y="2" width="1" height="5" /><rect x="3" y="1" width="1" height="7" />
+              </g>
+              {muted
+                ? <g fill="var(--red)"><rect x="5" y="3" width="1" height="1" /><rect x="7" y="3" width="1" height="1" /><rect x="6" y="4" width="1" height="1" /><rect x="5" y="5" width="1" height="1" /><rect x="7" y="5" width="1" height="1" /></g>
+                : <g fill="var(--gold)"><rect x="5" y="3" width="1" height="3" /><rect x="7" y="2" width="1" height="1" /><rect x="8" y="3" width="1" height="3" /><rect x="7" y="6" width="1" height="1" /></g>}
+            </svg>
           </button>
         </div>
       </header>
@@ -469,10 +503,22 @@ export default function App() {
         <div className="actions">
           {status === 0 && role === 'pm' && (
             <>
-              <select className="note-pick" value={noteIdx} onChange={(e) => setNoteIdx(Number(e.target.value))} aria-label="变更说明" disabled={!!busy}>
-                {NOTES.map((n, i) => <option key={i} value={i}>{n}</option>)}
-              </select>
-              <button className={`btn submit ${busy === '提交变更' ? 'working' : ''}`} disabled={!!busy} onClick={submit}>
+              <div className={`note-box ${noteOk || !note.trim() ? '' : 'over'}`}>
+                <input
+                  className="note-pick" list="note-presets" value={note} disabled={!!busy}
+                  onChange={(e) => setNote(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && noteOk && !busy) submit(); }}
+                  placeholder="写下这次改了什么" aria-label="变更说明"
+                />
+                <span className="note-count" aria-live="polite">
+                  {noteBytes > NOTE_MAX ? `超出约 ${Math.ceil((noteBytes - NOTE_MAX) / 3)} 字` : `还能写约 ${Math.floor((NOTE_MAX - noteBytes) / 3)} 字`}
+                </span>
+                <datalist id="note-presets">
+                  {NOTES.map((n) => <option key={n} value={n} />)}
+                </datalist>
+              </div>
+              <button className={`btn submit ${busy === '提交变更' ? 'working' : ''}`} disabled={!!busy || !noteOk} onClick={submit}>
                 {busy === '提交变更' ? '提交中…' : <>提交变更{nextNeedsCash && project ? <small> · 现付 {fmt(project.fee)}</small> : ''}</>}
               </button>
               <button className={`btn hot ${busy?.startsWith('机器人') ? 'working' : ''}`} disabled={!!busy} onClick={robot}>

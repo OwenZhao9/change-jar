@@ -3,17 +3,17 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEther } from 'viem';
 import type { Change, Project } from '@/lib/types';
 import { sfx } from '@/lib/audio';
-import { COIN, COIN_CASH, COIN_GOLD, Sprite, SpriteG } from './Sprite';
+import { Coin, CoinShape } from './Coin';
 import { fmt } from './Mon';
 
-const COLS = 5;
-const SLOTS = 35;
+const COLS = 4;
+const SLOTS = 20;
 const slot = (i: number) => {
   const s = i % SLOTS;
   const r = Math.floor(s / COLS);
   const c = s % COLS;
-  const jitter = (((i * 7) % 3) - 1) * 2; // 偶数单位，缩放后落在整像素上
-  return { x: 30 + c * 20 + jitter, y: 164 - r * 20 };
+  // 每枚 28 个单位见方（14 格 × 2），偶数坐标，缩放后落在整像素上
+  return { x: 24 + c * 28, y: 156 - r * 28 };
 };
 const reduced = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -125,15 +125,24 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
             <rect x="32" y="32" width="96" height="8" />
             <rect x="24" y="40" width="112" height="144" />
           </g>
+          <g fill="#ffffff" opacity="0.45">
+            <rect x="28" y="56" width="4" height="64" />
+            <rect x="28" y="128" width="4" height="8" />
+            <rect x="52" y="18" width="4" height="12" />
+          </g>
+          <g fill="#3aa8c4" opacity="0.5">
+            <rect x="128" y="52" width="4" height="120" />
+            <rect x="24" y="176" width="112" height="4" />
+          </g>
           <g className={`coins ${showCoins ? '' : 'coins-out'}`}>
             {coins.map((c) => {
               const p = slot(c.i - 1);
               const paid = changes[c.i] ? !changes[c.i].paidFromDeposit : false;
               return (
                 <g key={c.i} transform={`translate(${p.x} ${p.y})`}>
-                  <g className={c.fresh ? 'coin-x' : ''} style={{ ['--dx' as string]: `${80 - 10 - p.x}px` }}>
+                  <g className={c.fresh ? 'coin-x' : ''} style={{ ['--dx' as string]: `${80 - 14 - p.x}px` }}>
                     <g className={c.fresh ? 'coin-y' : ''} style={{ ['--h' as string]: `${p.y + 50}px` }}>
-                      <SpriteG map={COIN} palette={paid ? COIN_CASH : COIN_GOLD} cell={2} />
+                      <g transform="scale(1.0769) translate(1 1)"><CoinShape kind={paid ? 'cash' : 'gold'} /></g>
                     </g>
                   </g>
                 </g>
@@ -151,15 +160,6 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
             <rect x="16" y="48" width="8" height="136" />
             <rect x="136" y="48" width="8" height="136" />
             <rect x="24" y="184" width="112" height="8" />
-          </g>
-          <g fill="#ffffff" opacity="0.45">
-            <rect x="28" y="56" width="4" height="64" />
-            <rect x="28" y="128" width="4" height="8" />
-            <rect x="52" y="18" width="4" height="12" />
-          </g>
-          <g fill="#3aa8c4" opacity="0.5">
-            <rect x="128" y="52" width="4" height="120" />
-            <rect x="24" y="176" width="112" height="4" />
           </g>
         </svg>
         {stamp !== 'none' && (
@@ -179,6 +179,7 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
 
       <div className="jar-readout">
         <div className="tally">
+          <span className="tally-coin" aria-hidden><Coin size={30} /></span>
           <span key={launched ? 'l' : landed} className="px big tick">{launched ? 0 : landed}</span>
           <span>枚 · 共 <b className="gold">{launched ? '0' : fmt(landedFee)}</b> MON</span>
         </div>
@@ -201,12 +202,12 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
         <div className="rain" aria-hidden key={rain}>
           {Array.from({ length: 44 }, (_, k) => {
             const left = (k * 37) % 100;
-            const size = k % 3 === 0 ? 30 : 20;
+            const size = k % 3 === 0 ? 42 : 28;
             const delay = ((k * 29) % 100) / 70;
             const dur = 1.3 + ((k * 17) % 10) / 9;
             return (
               <span key={k} style={{ left: `${left}%`, animationDelay: `${delay}s`, animationDuration: `${dur}s`, width: size, height: size }}>
-                <Sprite map={COIN} palette={k % 5 === 0 ? COIN_CASH : COIN_GOLD} cell={size / 10} />
+                <Coin size={size} kind={k % 5 === 0 ? 'cash' : 'gold'} />
               </span>
             );
           })}
