@@ -196,7 +196,7 @@ a { color: var(--glass); }
   60% { transform: translate(-4px, 1px); } 80% { transform: translate(3px, 0); }
 }
 .stamp {
-  position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%) rotate(-12deg);
+  position: absolute; left: 50%; top: 36%; transform: translate(-50%, -50%) rotate(-12deg);
   border: 5px solid var(--red); color: var(--red); background: #1a0b14e6; padding: 8px 12px; text-align: center;
   box-shadow: 0 0 0 3px #1a0b14, 0 0 24px #ff4d5e66; white-space: nowrap; z-index: 3; pointer-events: none;
 }
