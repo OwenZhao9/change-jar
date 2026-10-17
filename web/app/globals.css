@@ -431,6 +431,7 @@ body {
 .tally b { font-size: 15px; }
 .icon { display: grid; place-items: center; color: var(--text); }
 .icon:hover { border-color: var(--line2); }
+.icon:disabled { opacity: .5; cursor: not-allowed; }
 /* 开发栏：规则说明紧跟在卡片下面 */
 .devs .note { margin: 4px 0 0; }
 /* 输入框：字数提示放在框内右侧，和按钮对齐 */

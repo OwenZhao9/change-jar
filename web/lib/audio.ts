@@ -4,6 +4,10 @@ let muted = false;
 export function setMuted(m: boolean) { muted = m; if (m) bgm.stop(); else if (ctx) bgm.start(); }
 export function isMuted() { return muted; }
 
+let musicOff = false;
+/** 单独开关背景音乐，音效不受影响 */
+export function setMusicOff(m: boolean) { musicOff = m; if (m) bgm.stop(); else if (ctx) bgm.start(); }
+
 function ac(): AudioContext | null {
   try {
     if (!ctx) {
@@ -63,7 +67,7 @@ const bgm = (() => {
   };
   return {
     start() {
-      if (timer !== null || muted) return;
+      if (timer !== null || muted || musicOff) return;
       const c = ac(); if (!c) return;
       out = c.createGain();
       out.gain.setValueAtTime(0.0001, c.currentTime);
