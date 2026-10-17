@@ -17,7 +17,7 @@ import { Coin } from './Coin';
 const NOTE_MAX = 140; // 合约限制：变更说明最多 140 字节
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
-const MIN_BAL: Record<Role, bigint> = { pm: parseEther('1'), dev1: parseEther('0.02'), dev2: parseEther('0.02') };
+const MIN_BAL: Record<Role, bigint> = { pm: parseEther('0.3'), dev1: parseEther('0.02'), dev2: parseEther('0.02') };
 const PID_KEY = `cj.pid.${CONTRACT_ADDRESS ?? 'local'}`;
 const LABEL: Record<Call['fn'], string> = {
   createProject: '创建项目', acknowledge: '已收到', submitChange: '提交变更', launch: '上线', withdraw: '领取',
