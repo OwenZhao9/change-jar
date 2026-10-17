@@ -4,7 +4,15 @@
 
 部署在 Monad 测试网（chainId 10143）。
 
+在线演示：https://change-jar.pages.dev
+
 合约地址：`0x7a07aD401432441a8A304D54F814AD0C0c9aD8A4`
+
+## 技术栈
+
+- 合约：Solidity 0.8.28、Foundry
+- 前端：Next.js（静态导出）、TypeScript、viem，部署在 Cloudflare Pages
+- 链：Monad 测试网，提交变更单使用 `sendTransactionSync` 同步回执
 
 ## 规则
 
