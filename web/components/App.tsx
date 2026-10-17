@@ -69,6 +69,7 @@ export default function App() {
   const [tx, setTx] = useState<TxView | null>(null);
   const [pending, setPending] = useState<{ version: number; note: string } | null>(null);
   const [robotStep, setRobotStep] = useState(0);
+  const [robotTotal, setRobotTotal] = useState(6);
   const robotHide = useRef<number | undefined>(undefined);
   const txSeq = useRef(0);
   const txHide = useRef<number | undefined>(undefined);
@@ -316,13 +317,15 @@ export default function App() {
     }
   });
 
-  const robot = () => run('机器人连改', async () => {
+  /** 机器人连续提交 n 张变更单 */
+  const robot = (n: number) => run('机器人连改', async () => {
     let idx = noteIdx;
     let known: Project | undefined;
     window.clearTimeout(robotHide.current);
     setRobotStep(0);
-    for (let k = 0; k < 6; k++) {
-      setBusy(`机器人连改 ${k + 1}/6`);
+    setRobotTotal(n);
+    for (let k = 0; k < n; k++) {
+      setBusy(`机器人连改 ${k + 1}/${n}`);
       const t0 = performance.now();
       const next = await submitOne(NOTES[idx % NOTES.length], known, true);
       if (!next) break;
@@ -332,7 +335,7 @@ export default function App() {
       setNoteIdx(idx % NOTES.length);
       setNote(NOTES[idx % NOTES.length]);
       const gap = 700 - (performance.now() - t0);
-      if (gap > 0 && k < 5) await sleep(gap);
+      if (gap > 0 && k < n - 1) await sleep(gap);
     }
     await refreshUntil((x) => (x.project?.version ?? 0) >= (known?.version ?? 0));
     robotHide.current = window.setTimeout(() => setRobotStep(0), 1500);
@@ -545,9 +548,11 @@ export default function App() {
               <button className={`btn submit ${busy === '提交变更' ? 'working' : ''}`} disabled={!!busy || !noteOk} onClick={submit}>
                 {busy === '提交变更' ? '提交中…' : <>提交变更{nextNeedsCash && project ? <small> · 现付 {fmt(project.fee)}</small> : ''}</>}
               </button>
-              <button className={`btn hot ${busy?.startsWith('机器人') ? 'working' : ''}`} disabled={!!busy} onClick={robot}>
-                {busy?.startsWith('机器人') ? `连改中 ${Math.min(robotStep + 1, 6)}/6` : '机器人连改 6 次'}
-              </button>
+              {[6, 8].map((n) => (
+                <button key={n} className={`btn hot ${busy?.startsWith('机器人') && robotTotal === n ? 'working' : ''}`} disabled={!!busy} onClick={() => robot(n)}>
+                  {busy?.startsWith('机器人') && robotTotal === n ? `连改中 ${Math.min(robotStep + 1, n)}/${n}` : `机器人连改 ${n} 次`}
+                </button>
+              ))}
             </>
           )}
           {status === 0 && (
@@ -559,8 +564,8 @@ export default function App() {
           {status === -1 && <span className="dim launched-hint">{role === 'pm' ? '填好参数后点「创建项目」开始' : '切换到「产品经理」创建项目'}</span>}
           {status === 1 && <span className="dim launched-hint">项目已上线，各自领取分成</span>}
           {(busy?.startsWith('机器人') || robotStep > 0) && (
-            <div className="robot-progress" aria-label={`机器人进度 ${robotStep}/6`}>
-              {Array.from({ length: 6 }, (_, k) => <i key={k} className={k < robotStep ? 'on' : k === robotStep && busy ? 'now' : ''} />)}
+            <div className="robot-progress" aria-label={`机器人进度 ${robotStep}/${robotTotal}`}>
+              {Array.from({ length: robotTotal }, (_, k) => <i key={k} className={k < robotStep ? 'on' : k === robotStep && busy ? 'now' : ''} />)}
             </div>
           )}
         </div>
