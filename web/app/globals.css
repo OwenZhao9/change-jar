@@ -332,7 +332,7 @@ a { color: var(--glass); }
 .dot { width: 8px; height: 8px; background: var(--green); display: inline-block; animation: blink 1.2s steps(2) infinite; }
 
 .fly-layer { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
-.fly-coin { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; will-change: transform; filter: drop-shadow(0 0 6px #ffcf3faa); }
+.fly-coin { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; will-change: transform; filter: drop-shadow(0 0 6px #ffcf3faa); }
 .fly-coin svg { display: block; }
 
 /* ---------- 细节打磨 ---------- */
@@ -411,6 +411,47 @@ body {
 @media (min-height: 860px) { .center:has(.create) .jar-wrap { width: 240px; } }
 .center:has(.create) .jar-readout { margin-top: 10px; }
 
+.note-box { position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 260px; }
+.note-box .note-pick { width: 100%; max-width: none; border-width: 2px; padding: 8px 10px; }
+.note-box .note-pick::placeholder { color: #5f5a8c; }
+.note-count { font-size: 11px; color: var(--dim); padding-left: 2px; }
+.note-box.over .note-pick { border-color: var(--red); }
+.note-box.over .note-count { color: var(--red); font-weight: 700; }
+
+/* 小号金额用等宽数字，像素字体只留给大数字和版本号 */
+:root { --num: 'SF Mono', ui-monospace, Menlo, Consolas, monospace; }
+.vmeta .fee, .wbal, .deposit-head b, .statusbar b.px, .head-meta b, .toast-msg b.px, .tally b {
+  font-family: var(--num); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0;
+}
+.vmeta .fee { font-size: 11px; }
+.wbal { font-size: 12px; }
+.deposit-head b { font-size: 12px; }
+.statusbar b.px, .toast-msg b.px { font-size: 12px; }
+.head-meta b { font-size: 12px; }
+.tally b { font-size: 15px; }
+.icon { display: grid; place-items: center; color: var(--text); }
+.icon:hover { border-color: var(--line2); }
+/* 开发栏：规则说明紧跟在卡片下面 */
+.devs .note { margin: 4px 0 0; }
+/* 输入框：字数提示放在框内右侧，和按钮对齐 */
+.note-box { flex-direction: row; align-items: center; width: min(100%, 400px); }
+.note-box .note-pick { padding-right: 104px; }
+.note-count { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; padding: 0; white-space: nowrap; }
+
+/* 大数字：等宽粗体，金色渐变加柔和光晕，不用像素字体的硬投影 */
+.tally .big, .share .big {
+  font-family: ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, sans-serif; font-weight: 900; font-variant-numeric: tabular-nums; letter-spacing: 0;
+  background: linear-gradient(180deg, #fff6c4 0%, #ffd04a 50%, #f5a020 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: none; filter: drop-shadow(0 0 10px #ffcf3f40);
+}
+.tally .big { font-size: 40px; line-height: 1; }
+.share .big { font-size: 18px; }
+.tally { gap: 10px; }
+
+.tally { align-items: center; }
+.tally-coin { display: inline-flex; filter: drop-shadow(0 0 8px #ffcf3f40); margin-right: -2px; }
+
 /* ---------- 窄屏 ---------- */
 @media (max-width: 900px) {
   .app { height: auto; }
@@ -427,6 +468,7 @@ body {
   .bottom { position: sticky; bottom: 0; z-index: 40; }
   .actions { padding: 8px 10px; gap: 8px; }
   .note-pick { flex: 1 1 100%; max-width: none; }
+  .note-box { flex: 1 1 100%; min-width: 0; }
   .btn { flex: 1; font-size: 13px; padding: 10px 8px; }
   .jar-wrap { width: 240px; }
   .toast { left: 10px; right: 10px; width: auto; max-width: none; bottom: calc(100% + 8px); }
@@ -452,7 +494,7 @@ body {
   .panel { padding: 10px; border-width: 3px; box-shadow: 4px 4px 0 #00000066; }
   .jar-wrap, .center:has(.create) .jar-wrap { width: 240px; }
   .jar-readout { margin-top: 8px; gap: 8px; }
-  .tally .big { font-size: 22px; }
+  .tally .big { font-size: 28px; }
   .stamp { padding: 6px 8px; border-width: 4px; }
   .stamp b { font-size: 15px; letter-spacing: 1px; }
   .stamp span { font-size: 11px; }
@@ -472,7 +514,7 @@ body {
   .vbadge { min-width: 32px; font-size: 9px; padding: 5px 3px; }
   .vnote { font-size: 12px; }
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px; }
-  .actions > .note-pick, .actions > .btn.launch, .actions > .robot-progress, .actions > .launched-hint, .actions > .btn:only-child { grid-column: 1 / -1; }
+  .actions > .note-box, .actions > .btn.launch, .actions > .robot-progress, .actions > .launched-hint, .actions > .btn:only-child { grid-column: 1 / -1; }
   .note-pick { padding: 7px; font-size: 13px; }
   .btn { font-size: 13px; padding: 10px 6px; }
   .robot-progress { justify-content: center; }
