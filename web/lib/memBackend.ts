@@ -1,7 +1,7 @@
 // 仅本地开发使用的内存合约，逻辑与 ChangeJar.sol 一致
 import { keccak256, toHex, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import type { Backend, Call, Change, Project, TxResult } from './types';
+import type { Backend, Call, Change, Project, TxResult, TxStage } from './types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const STORE = 'cj.mem.v1';
@@ -45,9 +45,12 @@ export function createMemBackend(): Backend {
     async balance(a) { return m.bal[low(a)] ?? 0n; },
     async blockNumber() { return BigInt(m.block); },
     async fund(a) { await sleep(300); m.bal[low(a)] = (m.bal[low(a)] ?? 0n) + 5_000000000000000000n; },
-    async send(pk: Hex, call: Call): Promise<TxResult> {
-      const t0 = performance.now();
+    async send(pk: Hex, call: Call, onStage?: (s: TxStage) => void): Promise<TxResult> {
+      onStage?.('signing');
       const who = low(privateKeyToAccount(pk).address);
+      await sleep(150);
+      onStage?.('sent');
+      const t0 = performance.now();
       await sleep(350 + Math.random() * 250);
       const bal = m.bal[who] ?? 0n;
       const value = 'value' in call ? call.value : 0n;

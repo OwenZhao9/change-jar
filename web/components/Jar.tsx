@@ -12,7 +12,7 @@ const slot = (i: number) => {
   const s = i % SLOTS;
   const r = Math.floor(s / COLS);
   const c = s % COLS;
-  const jitter = ((i * 7) % 5) - 2;
+  const jitter = (((i * 7) % 3) - 1) * 2; // 偶数单位，缩放后落在整像素上
   return { x: 30 + c * 20 + jitter, y: 164 - r * 20 };
 };
 const reduced = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -28,6 +28,7 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
   const [rain, setRain] = useState(0);
   const [shake, setShake] = useState(false);
   const [gone, setGone] = useState(false);
+  const [bump, setBump] = useState<{ n: number; cash: boolean }>({ n: 0, cash: false });
   const inited = useRef(false);
   const stampSeen = useRef(false);
   const queued = useRef(0);
@@ -40,6 +41,7 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
   // 落币队列：首次读取直接摆好，之后新增的逐枚落下
   useEffect(() => {
     if (!inited.current) {
+      if (!project) return; // 等第一次链上读取完成再摆放
       inited.current = true;
       queued.current = total;
       setCoins(Array.from({ length: total }, (_, k) => ({ i: k + 1, fresh: false })));
@@ -52,13 +54,18 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
     }
     while (queued.current < total) {
       const i = ++queued.current;
+      const cash = changes[i] ? !changes[i].paidFromDeposit : false;
       if (reduced()) { setCoins((c) => [...c, { i, fresh: false }]); later(sfx.coin, 0); continue; }
       const now = performance.now();
       const at = Math.max(now, nextAt.current);
       nextAt.current = at + 430;
-      later(() => { setCoins((c) => [...c, { i, fresh: true }]); later(sfx.coin, 400); }, at - now);
+      later(() => {
+        setCoins((c) => [...c, { i, fresh: true }]);
+        later(() => { sfx.coin(); setBump((b) => ({ n: b.n + 1, cash })); }, 400);
+      }, at - now);
     }
-  }, [total]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total, !!project]);
 
   // 上线后罐子清空
   useEffect(() => { setGone(launched); }, [launched]);
@@ -84,7 +91,7 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
   const prevDepleted = useRef(false);
   useEffect(() => {
     if (!project) { prevDepleted.current = false; setStamp('none'); return; }
-    if (visualDepleted && !prevDepleted.current) {
+    if (visualDepleted && !prevDepleted.current && stamp === 'none') {
       if (!stampSeen.current && landed === total && coins.every((c) => !c.fresh) ) {
         // 首次载入时已处于用完状态：直接显示
         stampSeen.current = true; setStamp('static');
@@ -126,7 +133,7 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
                 <g key={c.i} transform={`translate(${p.x} ${p.y})`}>
                   <g className={c.fresh ? 'coin-x' : ''} style={{ ['--dx' as string]: `${80 - 10 - p.x}px` }}>
                     <g className={c.fresh ? 'coin-y' : ''} style={{ ['--h' as string]: `${p.y + 50}px` }}>
-                      <SpriteG map={COIN} palette={paid ? COIN_CASH : COIN_GOLD} cell={2.5} />
+                      <SpriteG map={COIN} palette={paid ? COIN_CASH : COIN_GOLD} cell={2} />
                     </g>
                   </g>
                 </g>
@@ -162,11 +169,17 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
           </div>
         )}
         {launched && <div className="launched-tag px">已上线</div>}
+        {bump.n > 0 && !launched && (
+          <>
+            <div key={`g${bump.n}`} className="jar-glow" aria-hidden />
+            <div key={`p${bump.n}`} className={`plus px ${bump.cash ? 'cash' : ''}`} aria-hidden>+{project ? fmt(project.fee) : ''}</div>
+          </>
+        )}
       </div>
 
       <div className="jar-readout">
         <div className="tally">
-          <span className="px big">{launched ? 0 : landed}</span>
+          <span key={launched ? 'l' : landed} className="px big tick">{launched ? 0 : landed}</span>
           <span>枚 · 共 <b className="gold">{launched ? '0' : fmt(landedFee)}</b> MON</span>
         </div>
         {project && (
@@ -177,7 +190,7 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
             </div>
             <div className="bar">
               {segs > 0 && segs <= 24
-                ? Array.from({ length: segs }, (_, k) => <i key={k} className={k < lit ? 'on' : ''} />)
+                ? Array.from({ length: segs }, (_, k) => <i key={k} className={k < lit ? 'on' : k === lit ? 'just' : ''} />)
                 : <i className="on" style={{ width: `${pct}%`, flex: 'none' }} />}
             </div>
           </div>
@@ -188,12 +201,12 @@ export const Jar = forwardRef<HTMLDivElement, Props>(function Jar({ project, cha
         <div className="rain" aria-hidden key={rain}>
           {Array.from({ length: 44 }, (_, k) => {
             const left = (k * 37) % 100;
-            const size = 12 + ((k * 13) % 14);
+            const size = k % 3 === 0 ? 30 : 20;
             const delay = ((k * 29) % 100) / 70;
             const dur = 1.3 + ((k * 17) % 10) / 9;
             return (
               <span key={k} style={{ left: `${left}%`, animationDelay: `${delay}s`, animationDuration: `${dur}s`, width: size, height: size }}>
-                <Sprite map={COIN} palette={k % 5 === 0 ? COIN_CASH : COIN_GOLD} cell={size / 8} />
+                <Sprite map={COIN} palette={k % 5 === 0 ? COIN_CASH : COIN_GOLD} cell={size / 10} />
               </span>
             );
           })}

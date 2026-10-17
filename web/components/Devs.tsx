@@ -46,7 +46,12 @@ export function Devs({ project, jarShown, claimable, balances, active, busy, onC
           </div>
         );
       })}
-      <p className="dim small note">上线前的数字为预估</p>
+      <div className="rules note">
+        <div className="rule"><span>变更罐</span><b>{n} 位开发平分</b></div>
+        <div className="rule"><span>剩余保证金和零头</span><b>记给产品经理</b></div>
+        <div className="rule"><span>领取方式</span><b>各自点「领取」</b></div>
+        <p className="dim small">上线前显示的是预估</p>
+      </div>
     </section>
   );
 }
