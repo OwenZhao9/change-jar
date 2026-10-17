@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+cache/
+broadcast/
+.env
+.env.*
+!.env.example
+.DS_Store
+.vercel/
+.wrangler/
+contracts/lib/
